@@ -1,6 +1,6 @@
-# Connectivity over a LAN
-
-The testbed is a simple Ethernet network with three hosts: H1, H2, and H2. Each one has its own IP address, that is `10.0.1.1/25` (H1), `10.0.1.2/25` (H2), and `10.0.1.3/25` (H3). Morevoer, each is running the same OS (Ubuntu) based on the Linux kernel __6.2.0-34-generic__.
+# LAN connection, ICMP and miss-configurations
+ 
+The testbed is a simple Ethernet network with three hosts: H1, H2, and H2. Each one has its own IP address, that is `10.0.1.1/25` (H1), `10.0.1.2/25` (H2), and `10.0.1.3/25` (H3). Each host is running Ubuntu based on the Linux kernel __6.2.0-34-generic__.
 
 #### Network topology
 
@@ -140,7 +140,7 @@ If H1 doesn't know the MAC address of H2, before sending out the ICMP echo-reque
 
 ### _What happens if H1 tries to ping a host that is not active and does NOT belong to your subnet? Is there any packet sent on the LAN? Which packets are those?_
 
-If H1 doesn't know the MAC address of H2, before sending out the ICMP echo-request packets, H1 must brodcasts an ARP request. However, since H2 is off-line, no ARP replies show up. In the end, because of ARP failing, the ICMP layer returns a boooh. 
+If H2 doesn't belong to the H1's network, H1 uses its own default gateway. If so, the gateway can either forward the ICMP echo-request successfully or fail because there is no route configured for H2. If failing, the router returns a __Destination Net Unreacheable__, that is *'Sorry, I'm not able to solve this'*. Conversely, H1's traffic reaches effectively the H2's network, but H2 may either online or offline. If offline, I will get a __Destination Host Unreacheable__, because of the remote router has failed ARP, that is *'Sorry, H2 is sleeping or something else'*.
 
 
 # Advanced quora
@@ -158,7 +158,7 @@ Theoretically, the sender receives multiple replies coming from all the active h
 
 You can clearly see the ICMP echo-replies coming back from the other two hosts plus the sender one. Yet, if sending an ICMP echo-request whose destination is the broadcast, the number of replies depends on the active hosts. If X, the sender gets X replies. As more the active hosts are, as more the sender fills its own bandwith with ICMP echo-replies message. As a result, the incoming traffic may be huge, and this is what an attacker exploits to force a DoS attack.
 
-Notice that no ARP requests are sent, since any IPv4 broacast address is mapped onto `FF:FF:FF:FF:FF:FF` Ethernet address!
+Notice that no ARP requests are sent, since any IPv4 broacast address is mapped onto `FF:FF:FF:FF:FF:FF` Ethernet address automatically!
 
 ----
 
@@ -169,40 +169,44 @@ The networking address should never be used as unicast address, since it is rese
 
 # Advanced quora on duplicated addresses
 
-Configure the LAN so that there are two hosts with the same IP address, H1, H1', H2. So, H1 and H2 share `10.0.1.1/25` while H2 still has `10.0.1.3/25`.
+Configure the LAN so that there are two hosts with the same IP address. Let's say H1 and H2 have `10.0.1.1/25`, while H3 still has `10.0.1.3/25`.
 
-#### H1
+#### H1 setup
 [comment]: <> (image = 2.png)
 <p align="center">
   <img src="img/2.png">
 </p>
 
-#### H1' (after being H2)
+#### H2 setup
 [comment]: <> (image = 11.png)
 <p align="center">
   <img src="img/11.png">
 </p>
 
-#### H2 (after being H3)
+#### H3 setup
 [comment]: <> (image = 4.png)
 <p align="center">
   <img src="img/4.png">
 </p>
 
 
-### _What happens when H2 pings H1? Check the arp tables of H1, H1’, and H2_
+### _What happens when H3 pings `10.0.1.1/25`, that is a duplicatd IP address in the LAN? Check the ARP tables of H1, H2, and H3_.
 
-Assuming that H2 doesn't know the MAC addess which is associated to `10.0.1.1/25`, H2 sends an ARP request. Both H1 and H1' replies, but just the first incoming reply is stored in the ARP table of H2. Therefore, there is a kind of race condition, and the result is not deterministic: it depends on network latency.
+If two hosts are using the same IP address, then sooner or later one host or the other will broadcast an ARP Request. The result is an __ARP collision__, that is when two or more computers are responding to an ARP request with different answers: in other words, it is one IP address with two MACs.
 
-#### H2 (after being H3) ARP table 
+When H3 looks for the MAC address of `10.0.1.1/25`, both H1 and H2 reply. H3 gets the messages, but just the first one is cached. After receiving an ARP Response for a specific IP address, the host that made the ARP Request ignores what it is following because the it has already obtained the desired association and does not need to update it until the ARP cache expires.
+
+#### H3 ARP table 
 [comment]: <> (image = 12.png)
 <p align="center">
   <img src="img/12.png">
 </p>
 
-The MAC address `52:54:00:37:32:1d` is H1'. 
+H3 relies on the MAC address `52:54:00:37:32:1d`, that is H2, while loses the race. 
 
-### _What happens when H1 and H1’ starts pinging H2 at the same time?_
+### _What happens when H1 and H2 starts pinging H3 at the same time?_
+
+Since H1 and H2 don't know the MAC address associated to `10.0.1.3/25`, they broadcast an ARP Request. H3 may receive the request coming from either H1 or H2 first. Therefore, H3 replies just the quickest one as before.
 
 
 # Advanced quora on wrong network netmask
@@ -235,29 +239,22 @@ Configure the LAN so that H1 sees H2 as belonging to its subnet, but H2 does not
 </p>
 
 
-### _What happens when H1 pings H2? Which packets is H1 sending? Which packets is H2 sending? How do arp tables of H1 and H2 change?_
+### _What happens when H1 pings H2? Which packets is H1 sending? Which packets is H2 sending? How do ARP tables of H1 and H2 change?_
 
-While for host H1 host H2 is in its own subnet and is therefore reachable through its physical interface, host H2 perceives H1 in an external network. This means that H1 uses ARP to discover the MAC address of H2, but although the requests are reliably sent, they are not answered. H2 will not 
+According to the routing table, H1 is able to reach all the hosts from `10.0.1.1` up to `10.0.1.254`, while H1 can only reach the half, that is from `10.0.1.1` up to `10.0.1.126`. Now, there are two main scenarios:
 
-### H1 trace
-[comment]: <> (image = 17.png)
-<p align="center">
-  <img src="img/17.png">
-</p>
+1. If H1 has an IP address in between `10.0.1.1` and `10.0.1.126`, H1 and H2 can talk successfully. This what would happen if running the setup depicted in the images above.
+2. If H1 has an IP address greater than `10.0.1.126`, H1 and H2 no longer talk as expected.
 
-As expected, H1's ARP table is not fullfilled.
+To be more precise, if H1 has an IP address which is greater than the brodcast address of the network H1 is attached to (let's say `10.0.1.129`), the miss-configuration shows up as H2 receiving an ARP Request from a host which is not inside the LAN. Conversely, if H1 has an IP address which is the broacast address of the network H1 is attached to, that is `10.0.1.127`, the miss-configuration shows up as H2 receiving an ARP Request from a reserved address: the brodcast address is not supposed to be there! In both cases, H2 doesn't reply at all, so ARP table of H1 reveals some missing info.
 
-### H1 ARP table
-[comment]: <> (image = 18.png)
-<p align="center">
-  <img src="img/18.png">
-</p>
+Overall, having H1 with an IP address either greater or equal `10.0.1.127` is a hazard, which further leads to have connectivity issues.
 
 ----
 
-### _What happens when H2 pings H1? Which packets is H1 sending? Which packets is H2 sending? How do arp tables of H1 and H2 change?_
+### _What happens when H2 pings H1? Which packets is H1 sending? Which packets is H2 sending? How do ARP tables of H1 and H2 change?_
 
-Conversely, if H2 pings H1, since the routing table doesn't contain any reference to the network where H1 resides, `ping` fails, the network is not reachable at all.
+If H2 "sees" H1, that is H1 having an IP address in the H2's network, H1 and H2 can talk successfully. Conversely, if H1 is out of scope, H2 gets an error from the OS that is __Destination Host Unreachable__, and no packets are sent over the LAN.
 
 # Advanced quora on wrong netmask and conflict brodcast address
 
@@ -279,12 +276,12 @@ Configure the LAN so that
   <img src="img/20.png">
 </p>
 
-### _What happens when H1 pings H2? Which packets is H1 sending? Which packets is H2 sending? How do arp tables of H1 and H2 change?_
+### _What happens when H1 pings H2? Which packets is H1 sending? Which packets is H2 sending? How do ARP tables of H1 and H2 change?_
 
-Assuming that H1 doesn't know the MAC address of H1, H1 sends out an ARP request. The ARP request is broadcasted over the LAN, and therefore it reaches also H2. However, H2 realizes that who is asking for its own MAC address is not a host, but a the broadcast. As a consequence, H2 doesn't reply at any ARP request coming from H1. H1 cannot reach H2 at all.
+This is the second scenario you saw before: H1 has an address which is the brodcast address of the network H2 is attached to. As before, since H1 doesn't know the MAC address of H2, it puts on the wire an ARP Request. However, the brodcast is never supposed to be a requestor, so H2 simply ignores them all. Because of ARP failing, H1 gets back a __Destination Host Unreachable__. In this condition, the ARP table of H2 doesn't get altered, while the ARP table of H1 claims for some missing info.
 
 ----
 
-### _What happens when H2 pings H1? Which packets is H1 sending? Which packets is H2 sending? How do arp tables of H1 and H2 change?_
+### _What happens when H2 pings H1? Which packets is H1 sending? Which packets is H2 sending? How do ARP tables of H1 and H2 change?_
 
-Assuming that H1 and H2 have disabled the ICMP brodcast safeguard, H2 start sending out ICMP echo-request. H2 doesn't use an ARP request, since the any IPv4 brodcast address is mapped onto `FF:FF:FF:FF:FF:FF`. As a consequence of that, it will never discover the MAC address of H1, and it simply keeps receiving its own ICMP echo-replies, from the localhost.
+H2 sees H1 as the brodcast address, so no ARP Request are sent out over the LAN. If so, H2 will never discover the MAC address of H1 at all. H2 just recevies replies from itself.
