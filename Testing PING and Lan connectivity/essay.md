@@ -1,4 +1,4 @@
-# LAN connection, ICMP and miss-configurations
+# ICMP protocol testing, and LAN troubleshooting
  
 The testbed is a simple Ethernet network with three hosts: H1, H2, and H2. Each one has its own IP address, that is `10.0.1.1/25` (H1), `10.0.1.2/25` (H2), and `10.0.1.3/25` (H3). Each host is running Ubuntu based on the Linux kernel __6.2.0-34-generic__.
 
