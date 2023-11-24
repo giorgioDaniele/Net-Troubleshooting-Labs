@@ -17,9 +17,9 @@ Feel free to explore each lab folder for detailed instructions, code snippets, a
 
 Clone the repository to your local machine:
 
-    ```bash
-    git clone https://github.com/giorgioDaniele/Net-Troubleshooting-Labs.git
-    ```
+```bash
+ git clone https://github.com/giorgioDaniele/Net-Troubleshooting-Labs.git
+```
 
 ## Contributing
 
